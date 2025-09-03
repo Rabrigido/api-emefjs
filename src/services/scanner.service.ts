@@ -7,6 +7,11 @@ import { glob } from "glob";
 
 import { pathToFileURL } from "node:url";
 
+import { calculateMetrics } from 'metrics-js-ts'; 
+
+
+import fs from 'node:fs';
+
 
 // ───────────────── helpers ─────────────────
 function env(name: string, fallback?: string) {
@@ -28,12 +33,13 @@ function withTimeout<T>(p: Promise<T>, ms: number, label='modularity') {
 
 /** Si existe /src usa ese path; si no, cae al raíz del repo. */
 async function resolveBestCodePath(repoPath: string) {
-  const candidates = ["src", "packages", "apps", "app", "lib"];
+  // ⬇️ NUEVO ORDEN: prioriza build JS transpilado
+  const candidates = ["lib", "dist", "build", "out", "src", "packages", "apps", "app"];
   for (const c of candidates) {
     const p = path.join(repoPath, c);
     if (existsSync(p)) return p;
   }
-  return repoPath;
+  return repoPath; // fallback final
 }
 
 // ───────────────── basic scan ─────────────────
@@ -92,52 +98,54 @@ export async function basicScan(
  */
 // src/services/scanner.service.ts
 export async function tryRunModularityMetrics(codePath: string): Promise<unknown | undefined> {
-  console.log('[METRICS] start, DISABLE_METRICS=', process.env.DISABLE_METRICS);
-  if (process.env.DISABLE_METRICS === '1') {
-    console.log('[METRICS] disabled via env');
-    return undefined;
-  }
-
+  console.log('[METRICS] direct import path=', codePath);
   try {
-    const adapterFsPath = path.resolve(process.cwd(), 'modularity-adapter.js'); // C:\...\server\modularity-adapter.js
-    const adapterUrl = pathToFileURL(adapterFsPath).href;                       // file:///C:/.../modularity-adapter.js
-    console.log('[METRICS] loading adapter at:', adapterUrl);
+    const { calculateMetrics, default: def } = await import('metrics-js-ts');
 
-    const mod = await import(adapterUrl).catch((err) => {
-      console.warn('[METRICS] adapter import failed:', err?.message);
-      return null;
-    });
-
-    if (mod && typeof (mod as any).runModularityMetrics === 'function') {
-      const timeoutMs = Number(process.env.METRICS_TIMEOUT_MS || 20000);
-      console.log('[METRICS] running with timeout', timeoutMs, 'ms');
-      const out = await withTimeout((mod as any).runModularityMetrics(codePath), timeoutMs, 'modularity');
-      console.log('[METRICS] done');
-      return out;
-    } else {
-      console.warn('[METRICS] runModularityMetrics not found on adapter');
+    const fn = calculateMetrics ?? def;
+    if (typeof fn !== 'function') {
+      console.warn('[METRICS] no function exported');
+      return undefined;
     }
+
+    // Llamada mínima, como el demo:
+    const raw = await fn({ codePath, useDefaultMetrics: true });
+
+    // 🔎 Diagnóstico: ver qué campos trae
+    console.log('[METRICS] raw keys:', raw && Object.keys(raw));
+
+    return raw; // devuelve crudo para ver la forma real
   } catch (e: any) {
     console.warn('[METRICS] error:', e?.message || e);
+    return undefined;
   }
-  return undefined;
+}
+
+
+
+type ScanOptions = {
+  repoId: string;
+  baseDir: string; // p. ej. C:\...\server\data\repos
+};
+
+function pickCodePath(baseDir: string, repoId: string) {
+  const src = path.resolve(baseDir, repoId, 'src');
+  const lib = path.resolve(baseDir, repoId, 'lib');
+  if (fs.existsSync(src)) return src;
+  if (fs.existsSync(lib)) return lib;
+  return path.resolve(baseDir, repoId);
 }
 
 
 // ───────────────── entrypoint ─────────────────
-export async function scanRepo(
-  repoId: string,
-  repoPath: string,
-  scanGlob?: string
-): Promise<ScanResult> {
+export async function scanRepo(repoId: string, repoPath: string, scanGlob?: string): Promise<ScanResult> {
+  console.log('[SCAN] repoId=', repoId);
+  console.log('[SCAN] repoPath(in)=', repoPath);
+
   const codePath = await resolveBestCodePath(repoPath);
+  console.log('[SCAN] codePath(resolved)=', codePath);
+
   const stats = await basicScan(codePath, scanGlob);
   const modularityMetrics = await tryRunModularityMetrics(codePath);
-  return {
-    repoId,
-    scannedAt: new Date().toISOString(),
-    codePath,
-    stats,
-    modularityMetrics,
-  };
+  return { repoId, scannedAt: new Date().toISOString(), codePath, stats, modularityMetrics };
 }

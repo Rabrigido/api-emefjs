@@ -15,6 +15,8 @@ import {
 } from "../services/registry.service.js";
 import { scanRepo } from "../services/scanner.service.js";
 import type { RepoRecord } from "../types/RepoRecord.js";
+import fs from 'node:fs';
+
 
 export const ReposController = {
   list: () => listRepos(),
@@ -67,16 +69,28 @@ export const ReposController = {
 
 // src/controllers/repos.controller.ts
 scan: async (id: string) => {
-  console.log('[CTRL] scan id=', id); // <-- AQUI
+  console.log('[CTRL] scan id=', id);
   const rec = getRepo(id);
   if (!rec) {
-    const e = new Error('Repo no encontrado');
-    (e as any).status = 404;
+    const e: any = new Error('Repo no encontrado');
+    e.status = 404;
     throw e;
   }
-  const out = await scanRepo(id, rec.localPath, ENV.SCAN_GLOB);
-  console.log('[CTRL] scan ok');      // <-- AQUI
+
+  // ⚠️ NO vuelvas a concatenar "id" si rec.localPath YA lo incluye
+  // rec.localPath debería ser ...\data\repos\<id>
+  const localPath = rec.localPath ?? path.join(ENV.REPOS_DIR(), id);
+  console.log('[CTRL] rec.localPath=', rec.localPath);
+  console.log('[CTRL] localPath(final)=', localPath);
+
+  if (!fs.existsSync(localPath)) {
+    const e: any = new Error(`Directorio del repo no existe: ${localPath}. ¿Lo clonaste antes?`);
+    e.status = 400;
+    throw e;
+  }
+
+  const out = await scanRepo(id, localPath, ENV.SCAN_GLOB);
+  console.log('[CTRL] scan ok');
   return out;
 },
-
 };

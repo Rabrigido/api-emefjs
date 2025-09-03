@@ -1,66 +1,59 @@
 // modularity-adapter.js
-export async function runModularityMetrics(codePath) {
-  // Importa el paquete real del repo (se llama metrics-js-ts)
+import fs from 'node:fs';
+import path from 'node:path';
+
+function onlyErrorKeys(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  const keys = Object.keys(obj);
+  return keys.length > 0 && keys.every(k => k.endsWith('errors'));
+}
+
+function hasMetricsLike(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  const cand = obj.metrics || obj.summary || obj.results || obj.data;
+  return !!(cand && Object.keys(cand).length);
+}
+
+async function callLib(runAt) {
   const mod = await import('metrics-js-ts');
+  const fn = mod.calculateMetrics ?? mod.runAll ?? mod.analyzeProject ?? mod.default;
+  if (typeof fn !== 'function') return { error: 'No suitable entry found', exports: Object.keys(mod) };
+  // llamada mínima como el demo-run
+  return await fn({ codePath: runAt, useDefaultMetrics: true });
+}
 
-  // Descubrimos qué función expone la lib:
-  const fn =
-    mod.calculateMetrics ??
-    mod.runAll ??
-    mod.analyzeProject ??
-    mod.default;
+export async function runModularityMetrics(codePath) {
+  // 0) Si te doy una pista manual, úsala primero (por env)
+  const hint = process.env.METRICS_ROOT_HINT ? path.resolve(codePath, process.env.METRICS_ROOT_HINT) : null;
+  const candidates = [
+    hint,
+    path.resolve(codePath),
+    path.join(codePath, 'lib'),
+    path.join(codePath, 'dist'),
+    path.join(codePath, 'build'),
+    path.join(codePath, 'out'),
+    path.join(codePath, 'src'),
+  ].filter(Boolean);
 
-  if (typeof fn !== 'function') {
-    return { error: 'No suitable entry found', exports: Object.keys(mod) };
+  for (const root of candidates) {
+    if (!fs.existsSync(root)) continue;
+    if (process.env.METRICS_VERBOSE === '1') console.log('[METRICS] trying at:', root);
+
+    const raw = await callLib(root);
+
+    // Si ya trae métricas "de verdad", devuélvelas crudas
+    if (hasMetricsLike(raw)) {
+      if (process.env.METRICS_VERBOSE === '1') console.log('[METRICS] success at:', root);
+      return raw; // ← crudo: verás exactamente el shape real
+    }
+
+    // Si NO son métricas pero tampoco es solo errores, igual devuélvelo
+    if (!onlyErrorKeys(raw)) {
+      return raw;
+    }
+    // Si es solo errores, intenta con el siguiente candidato
   }
 
-  // Llamada con opciones razonables (evitar ruido)
-  const options = {
-    codePath,                 // principal
-    path: codePath,           // alias por si la lib usa otro nombre
-    root: codePath,           // alias
-    glob: '**/*.{ts,tsx,js,jsx}',
-    ignore: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/build/**',
-      '**/coverage/**',
-      '**/.next/**',
-      '**/.turbo/**',
-      '**/.output/**',
-      '**/docs/**',
-      '**/examples/**',
-      '**/*.min.*'
-    ]
-  };
-
-  const raw = await fn(options);
-
-  // Normalización: intenta encontrar “las métricas” en distintos campos
-  const keys = Object.keys(raw ?? {});
-  const candidate =
-    raw?.metrics ??
-    raw?.summary ??
-    raw?.results ??
-    raw?.data ??
-    undefined;
-
-  // Si la lib solo retorna errores, deja claro que no hay métricas útiles
-  const onlyErrors =
-    keys.length > 0 &&
-    keys.every(k => k.endsWith('errors'));
-
-  return {
-    keys,                            // para depurar qué vino
-    hasMetrics: Boolean(candidate && Object.keys(candidate).length && !onlyErrors),
-    metrics: onlyErrors ? undefined : candidate,
-    details: raw?.files ?? raw?.byFile ?? undefined,
-    errors: {
-      parse: raw?.['parse-errors'] ?? [],
-      metric: raw?.['metric-errors'] ?? [],
-      traverse: raw?.['traverse-errors'] ?? []
-    },
-    // opcional: incluye la salida cruda si quieres inspeccionarla
-    // raw,
-  };
+  // Si ningún candidato funcionó, intentamos una última vez en codePath original y devolvemos lo que haya
+  return await callLib(codePath);
 }
