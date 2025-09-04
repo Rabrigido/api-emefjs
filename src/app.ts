@@ -1,13 +1,52 @@
-import express from 'express';
+// src/app.ts
+import express, { Request, Response, NextFunction } from 'express';
+import { httpLoggerToFile, httpLoggerToConsole } from './logger/http-logger.js';
 import { reposRouter } from './routes/repos.router.js';
-import { errorMiddleware } from './middlewares/error.middleware.js';
-
 
 export function createApp() {
-const app = express();
-app.use(express.json());
-app.get('/health', (_req, res) => res.json({ ok: true }));
-app.use('/repos', reposRouter);
-app.use(errorMiddleware);
-return app;
+  const app = express();
+
+  // Estás detrás de Nginx → usa la IP real desde X-Forwarded-For
+  app.set('trust proxy', true);
+
+  // Parseo de JSON ANTES de las rutas
+  app.use(express.json({ limit: '5mb' }));
+
+  // Logs (consola y archivo)
+  app.use(httpLoggerToConsole);
+  app.use(httpLoggerToFile);
+
+  // (Opcional) logs por router para depurar body/params
+  app.use('/repos', (req, _res, next) => {
+    const bodyPreview = (() => {
+      try { return JSON.stringify(req.body).slice(0, 500); } catch { return '[unserializable]'; }
+    })();
+    console.log(`[Repos] ${req.method} ${req.originalUrl} body=${bodyPreview}`);
+    next();
+  });
+
+  // Rutas
+  app.use('/repos', reposRouter);
+
+  // Health simple
+  app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }));
+
+  // 404 explícito
+  app.use((req: Request, res: Response) => {
+    console.warn(`[404] ${req.method} ${req.originalUrl}`);
+    res.status(404).json({ error: 'Not Found' });
+  });
+
+  // Handler de errores
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+    console.error(`[ERROR] ${req.method} ${req.originalUrl}`, err?.message ?? err);
+    if (err?.stack) console.error(err.stack);
+    res.status(err?.status || 500).json({ error: 'Internal Server Error' });
+  });
+
+  return app;
 }
+
+// Default export para que puedas hacer: import createApp from './app.js'
+export default createApp;
