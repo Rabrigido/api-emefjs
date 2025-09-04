@@ -10,7 +10,6 @@
     "build": "tsc -p .",
     "start": "node dist/server.js"
   },
-
   "keywords": [
     "modular",
     "metrics",
@@ -31,7 +30,7 @@
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
     "jest": "^30.0.4",
-    "metrics-js-ts": "github:danielzazzali/modularity-metrics",
+    "metrics-js-ts": "^0.8.0",
     "simple-git": "^3.28.0",
     "uuid": "^11.1.0"
   },

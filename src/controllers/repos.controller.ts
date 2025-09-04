@@ -1,30 +1,53 @@
+// src/controllers/repos.controller.ts
 import path from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import { ENV } from "../config/env.js";
-import {
-  searchPopularRepos,
-  getRepoByFullName,
-} from "../services/github.service.js";
-import { shallowClone } from "../services/git.service.js";
-import {
-  getRepo,
-  listRepos,
-  persistRegistry,
-  resetRepoDir,
-  upsertRepo,
-} from "../services/registry.service.js";
+import { getRepo, listRepos, persistRegistry, resetRepoDir, upsertRepo, removeRepo as removeFromRegistry } from "../services/registry.service.js";
 import { scanRepo } from "../services/scanner.service.js";
+import { shallowClone } from "../services/git.service.js";
+import { searchPopularRepos, getRepoByFullName } from "../services/github.service.js";
 import type { RepoRecord } from "../types/RepoRecord.js";
-import fs from 'node:fs';
 
+function parseFullNameFromGitUrl(gitUrl: string): string {
+  // soporta: https://github.com/owner/repo(.git) o git@github.com:owner/repo.git
+  let m = gitUrl.match(/github\.com[:/]+([^/]+)\/([^/.]+)(?:\.git)?$/i);
+  if (!m) {
+    const e = new Error("gitUrl no reconocido. Usa https://github.com/owner/repo(.git)");
+    (e as any).status = 400;
+    throw e;
+  }
+  return `${m[1]}/${m[2]}`;
+}
 
 export const ReposController = {
   list: () => listRepos(),
 
+  get: (id: string) => {
+    const rec = getRepo(id);
+    if (!rec) {
+      const e = new Error("Repo no encontrado");
+      (e as any).status = 404;
+      throw e;
+    }
+    return rec;
+  },
+
+  async create(payload: { fullName?: string; gitUrl?: string }) {
+    const fullName = payload.fullName?.trim()
+      || (payload.gitUrl ? parseFullNameFromGitUrl(payload.gitUrl) : undefined);
+
+    if (!fullName) {
+      const e = new Error("Debe enviar fullName ('owner/repo') o gitUrl");
+      (e as any).status = 400;
+      throw e;
+    }
+    // reutilizamos la lógica de loadByFullName
+    return await this.loadByFullName(fullName);
+  },
+
   loadRandom: async () => {
     const items = await searchPopularRepos();
-    if (!items?.length)
-      throw new Error("No se pudieron obtener repos populares");
+    if (!items?.length) throw new Error("No se pudieron obtener repos populares");
     const pick = items[Math.floor(Math.random() * Math.min(items.length, 50))];
     const id = uuidv4();
     const dest = path.join(ENV.REPOS_DIR(), id);
@@ -67,30 +90,26 @@ export const ReposController = {
     return rec;
   },
 
-// src/controllers/repos.controller.ts
-scan: async (id: string) => {
-  console.log('[CTRL] scan id=', id);
-  const rec = getRepo(id);
-  if (!rec) {
-    const e: any = new Error('Repo no encontrado');
-    e.status = 404;
-    throw e;
+  scan: async (id: string) => {
+    console.log('[CTRL] scan id=', id);
+    const rec = getRepo(id);
+    if (!rec) {
+      const e = new Error('Repo no encontrado');
+      (e as any).status = 404;
+      throw e;
+    }
+    const out = await scanRepo(id, rec.localPath, ENV.SCAN_GLOB);
+    console.log('[CTRL] scan ok');
+    return out;
+  },
+
+  remove: async (id: string) => {
+    const ok = await removeFromRegistry(id);
+    if (!ok) {
+      const e = new Error("Repo no encontrado");
+      (e as any).status = 404;
+      throw e;
+    }
+    return { ok: true };
   }
-
-  // ⚠️ NO vuelvas a concatenar "id" si rec.localPath YA lo incluye
-  // rec.localPath debería ser ...\data\repos\<id>
-  const localPath = rec.localPath ?? path.join(ENV.REPOS_DIR(), id);
-  console.log('[CTRL] rec.localPath=', rec.localPath);
-  console.log('[CTRL] localPath(final)=', localPath);
-
-  if (!fs.existsSync(localPath)) {
-    const e: any = new Error(`Directorio del repo no existe: ${localPath}. ¿Lo clonaste antes?`);
-    e.status = 400;
-    throw e;
-  }
-
-  const out = await scanRepo(id, localPath, ENV.SCAN_GLOB);
-  console.log('[CTRL] scan ok');
-  return out;
-},
 };

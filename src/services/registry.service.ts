@@ -4,11 +4,21 @@ import { ENV } from '../config/env.js';
 import { RepoRecord } from '../types/RepoRecord';
 
 
+
 const registry = new Map<string, RepoRecord>();
 
 
 export async function ensureDirs() {
 await mkdir(ENV.REPOS_DIR(), { recursive: true });
+}
+
+export async function removeRepo(id: string) {
+  const rec = registry.get(id);
+  if (!rec) return false;
+  await resetRepoDir(id);         // elimina carpeta si existe
+  registry.delete(id);            // saca del registro en memoria
+  await persistRegistry();        // persiste a disco
+  return true;
 }
 
 
