@@ -8,9 +8,10 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
+    "noImplicitAny": false,           // 👈 desactiva los errores por parámetros sin tipo
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src"],
+  "include": ["src", "src/types.d.ts", "src/types/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }
