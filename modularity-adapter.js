@@ -4,23 +4,24 @@ import { calculateMetrics } from "metrics-js-ts";
 export async function runModularityMetrics(codePath) {
   const result = await calculateMetrics({
     codePath,
-    useDefaultMetrics: true
+    useDefaultMetrics: true,
+    include: ['**/*.{js,jsx,ts,tsx}'],
+    excludeGlobs: [
+      '**/node_modules/**','**/dist/**','**/build/**','**/coverage/**',
+      '**/.next/**','**/.turbo/**','**/.output/**','**/.cache/**',
+      '**/docs/**','**/examples/**','**/*.min.*'
+    ]
   });
 
-  const keys = Object.keys(result ?? {}).filter(k => !k.endsWith("-errors"));
+  const keys = Object.keys(result ?? {}).filter(k => !k.endsWith('-errors'));
   return {
     keys,
     hasMetrics: keys.length > 0,
-    metrics: result,
+    metrics: result, // <-- TODO: aquí vienen TODAS las métricas
     errors: {
-      parse: result?.["parse-errors"] ?? [],
-      metric: result?.["metric-errors"] ?? [],
-      traverse: result?.["traverse-errors"] ?? []
+      parse: result?.['parse-errors'] ?? [],
+      metric: result?.['metric-errors'] ?? [],
+      traverse: result?.['traverse-errors'] ?? []
     }
   };
-}
-
-// helper para listar claves
-export function metricKeys(result) {
-  return Object.keys(result).filter(k => !k.endsWith("-errors"));
 }

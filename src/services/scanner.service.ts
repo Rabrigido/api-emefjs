@@ -2,39 +2,16 @@
 import type { ScanResult } from "../types/ScanResult";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import path from "node:path";
+import path, { dirname, resolve as pathResolve } from "node:path";
 import { glob } from "glob";
-
-import { pathToFileURL } from "node:url";
-
-import { calculateMetrics } from 'metrics-js-ts'; 
-
-
-
-import fs from 'node:fs';
-
+import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import fs from "node:fs";
 
 // ───────────────── helpers ─────────────────
-function env(name: string, fallback?: string) {
-  return process.env[name] ?? fallback;
-}
-
-function ms(n: string | number | undefined, fallback: number) {
-  const v = Number(n);
-  return Number.isFinite(v) && v > 0 ? v : fallback;
-}
-
-function withTimeout<T>(p: Promise<T>, ms: number, label='modularity') {
-  return new Promise<T>((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error(`${label}_timeout_${ms}ms`)), ms);
-    p.then(v => { clearTimeout(t); resolve(v); }, e => { clearTimeout(t); reject(e); });
-  });
-}
-
-
-/** Si existe /src usa ese path; si no, cae al raíz del repo. */
+/** Si existe /src usa ese path; si no, cae al raíz del repo.
+ *  Prioriza JS transpilado para análisis más estable. */
 async function resolveBestCodePath(repoPath: string) {
-  // ⬇️ NUEVO ORDEN: prioriza build JS transpilado
   const candidates = ["lib", "dist", "build", "out", "src", "packages", "apps", "app"];
   for (const c of candidates) {
     const p = path.join(repoPath, c);
@@ -44,16 +21,11 @@ async function resolveBestCodePath(repoPath: string) {
 }
 
 // ───────────────── basic scan ─────────────────
-/**
- * Contador mínimo: archivos, líneas, imports/exports y distribución por extensión.
- * Usa glob@11 (ya es promise, no necesitas promisify).
- */
-// Después (fix)
+/** Contador mínimo: archivos, líneas, imports/exports y distribución por extensión. */
 export async function basicScan(
   codePath: string,
   pattern?: string
 ): Promise<ScanResult["stats"]> {
-  // resuelve SIEMPRE un string
   const pat = pattern ?? process.env.SCAN_GLOB ?? "**/*.{ts,tsx,js,jsx}";
 
   const files = await glob(pat, {
@@ -71,11 +43,13 @@ export async function basicScan(
       "**/.cache/**",
       "**/docs/**",
       "**/examples/**",
-      "**/*.min.*"
+      "**/*.min.*",
     ],
   });
 
-  let lines = 0, imports = 0, exports = 0;
+  let lines = 0,
+    imports = 0,
+    exports = 0;
   const byExtension: Record<string, number> = {};
 
   for (const rel of files) {
@@ -91,71 +65,69 @@ export async function basicScan(
   return { files: files.length, lines, byExtension, imports, exports };
 }
 
+// ───────────────── metrics runner (proceso aislado) ─────────────────
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// src/services/scanner.service.ts
-export async function tryRunModularityMetrics(codePath: string): Promise<unknown | undefined> {
-  console.log('[METRICS] direct import path=', codePath);
-  try {
-    const { calculateMetrics, default: def } = await import('metrics-js-ts');
-    const fn = calculateMetrics ?? def;
-    if (typeof fn !== 'function') {
-      console.warn('[METRICS] no function exported');
-      return undefined;
-    }
-
-    const raw = await fn({
-      codePath,
-      useDefaultMetrics: true,
-      include: ['**/*.{js,jsx,ts,tsx}'],
-      excludeGlobs: [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/build/**',
-        '**/coverage/**',
-        '**/.next/**',
-        '**/.turbo/**',
-        '**/.output/**',
-        '**/.cache/**',
-        '**/docs/**',
-        '**/examples/**',
-        '**/*.min.*'
-      ],
-      // parserOptions: { sourceType: 'unambiguous' } // opcional si tu repo mezcla módulos
+/** Ejecuta metrics en un proceso limpio → sin caché ni estado previo */
+function runMetricsIsolated(codePath: string, timeoutMs = 120_000): Promise<any> {
+  // metrics-runner.js está en la raíz del proyecto (dos niveles arriba de services/)
+  const runner = pathResolve(__dirname, "../../metrics-runner.js");
+  return new Promise((resolveP, rejectP) => {
+    execFile("node", [runner, codePath], { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) {
+        // Log útil para diagnóstico
+        console.warn("[METRICS] runner failed:", err.message);
+        if (stderr) console.warn("[METRICS] runner stderr:", stderr);
+        return rejectP(err);
+      }
+      try {
+        const parsed = JSON.parse(stdout || "{}");
+        return resolveP(parsed);
+      } catch (e) {
+        console.warn("[METRICS] invalid JSON from runner");
+        return rejectP(e);
+      }
     });
-
-    console.log('[METRICS] raw keys:', raw && Object.keys(raw));
-    return raw;
-  } catch (e: any) {
-    console.warn('[METRICS] error:', e?.message || e);
-    return undefined;
-  }
+  });
 }
-
-
-
-type ScanOptions = {
-  repoId: string;
-  baseDir: string; // p. ej. C:\...\server\data\repos
-};
-
-function pickCodePath(baseDir: string, repoId: string) {
-  const src = path.resolve(baseDir, repoId, 'src');
-  const lib = path.resolve(baseDir, repoId, 'lib');
-  if (fs.existsSync(src)) return src;
-  if (fs.existsSync(lib)) return lib;
-  return path.resolve(baseDir, repoId);
-}
-
 
 // ───────────────── entrypoint ─────────────────
-export async function scanRepo(repoId: string, repoPath: string, scanGlob?: string): Promise<ScanResult> {
-  console.log('[SCAN] repoId=', repoId);
-  console.log('[SCAN] repoPath(in)=', repoPath);
+export async function scanRepo(
+  repoId: string,
+  repoPath: string,
+  scanGlob?: string
+): Promise<ScanResult> {
+  console.log("[SCAN] repoId=", repoId);
+  console.log("[SCAN] repoPath(in)=", repoPath);
 
   const codePath = await resolveBestCodePath(repoPath);
-  console.log('[SCAN] codePath(resolved)=', codePath);
+  console.log("[SCAN] codePath(resolved)=", codePath);
 
   const stats = await basicScan(codePath, scanGlob);
-  const modularityMetrics = await tryRunModularityMetrics(codePath);
-  return { repoId, scannedAt: new Date().toISOString(), codePath, stats, modularityMetrics };
+
+  let modularityMetrics: unknown | undefined = undefined;
+
+  if (process.env.DISABLE_METRICS === "1") {
+    console.log("[METRICS] disabled by env DISABLE_METRICS=1");
+  } else {
+    try {
+      modularityMetrics = await runMetricsIsolated(codePath);
+      const keys = modularityMetrics && typeof modularityMetrics === "object"
+        ? Object.keys(modularityMetrics as Record<string, any>)
+        : [];
+      console.log("[METRICS] keys:", keys);
+    } catch (e: any) {
+      console.warn("[METRICS] failed:", e?.message || e);
+      modularityMetrics = undefined; // no rompas la respuesta si falla
+    }
+  }
+
+  return {
+    repoId,
+    scannedAt: new Date().toISOString(),
+    codePath,
+    stats,
+    modularityMetrics, // ← adjuntamos crudo lo que entrega la lib (si hay)
+  };
 }
