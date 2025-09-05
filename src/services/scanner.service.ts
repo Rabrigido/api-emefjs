@@ -70,7 +70,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /** Ejecuta metrics en un proceso limpio → sin caché ni estado previo */
-function runMetricsIsolated(codePath: string, timeoutMs = 120_000): Promise<any> {
+function runMetricsIsolated(codePath: string, timeoutMs = 600_000): Promise<any> {
   // metrics-runner.js está en la raíz del proyecto (dos niveles arriba de services/)
   const runner = pathResolve(__dirname, "../../metrics-runner.js");
   return new Promise((resolveP, rejectP) => {
