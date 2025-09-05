@@ -2,12 +2,36 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { httpLoggerToFile, httpLoggerToConsole } from './logger/http-logger.js';
 import { reposRouter } from './routes/repos.router.js';
+import cors from 'cors';
 
 export function createApp() {
   const app = express();
 
   // Estás detrás de Nginx → usa la IP real desde X-Forwarded-For
   app.set('trust proxy', true);
+
+  // ====== CORS ======
+  const allowedOrigins = [
+    'https://mm-app-77559.ondigitalocean.app', // Front en DO App Platform
+    'https://emefjs.duckdns.org',              // Si abres UI desde acá también
+  ];
+
+  const corsOptions: cors.CorsOptions = {
+    origin: (origin, cb) => {
+      // Permite herramientas sin 'origin' (curl/ThunderClient)
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error('Not allowed by CORS'));
+    },
+    methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false, // pon true solo si usarás cookies/sesiones
+  };
+
+  // Preflight global antes de todo
+  app.options('*', cors(corsOptions));
+  app.use(cors(corsOptions));
+  // ====== /CORS ======
 
   // Parseo de JSON ANTES de las rutas
   app.use(express.json({ limit: '5mb' }));
@@ -48,5 +72,4 @@ export function createApp() {
   return app;
 }
 
-// Default export para que puedas hacer: import createApp from './app.js'
 export default createApp;
