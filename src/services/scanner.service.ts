@@ -92,30 +92,39 @@ export async function basicScan(
 }
 
 
-// ───────────────── adapter opcional ─────────────────
-/**
- * Intenta cargar ./modularity-adapter.js (en la raíz del server) y ejecutarlo con timeout.
- * Puedes apagarlo con DISABLE_METRICS=1
- */
 // src/services/scanner.service.ts
 export async function tryRunModularityMetrics(codePath: string): Promise<unknown | undefined> {
   console.log('[METRICS] direct import path=', codePath);
   try {
     const { calculateMetrics, default: def } = await import('metrics-js-ts');
-
     const fn = calculateMetrics ?? def;
     if (typeof fn !== 'function') {
       console.warn('[METRICS] no function exported');
       return undefined;
     }
 
-    // Llamada mínima, como el demo:
-    const raw = await fn({ codePath, useDefaultMetrics: true });
+    const raw = await fn({
+      codePath,
+      useDefaultMetrics: true,
+      include: ['**/*.{js,jsx,ts,tsx}'],
+      excludeGlobs: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/build/**',
+        '**/coverage/**',
+        '**/.next/**',
+        '**/.turbo/**',
+        '**/.output/**',
+        '**/.cache/**',
+        '**/docs/**',
+        '**/examples/**',
+        '**/*.min.*'
+      ],
+      // parserOptions: { sourceType: 'unambiguous' } // opcional si tu repo mezcla módulos
+    });
 
-    // 🔎 Diagnóstico: ver qué campos trae
     console.log('[METRICS] raw keys:', raw && Object.keys(raw));
-
-    return raw; // devuelve crudo para ver la forma real
+    return raw;
   } catch (e: any) {
     console.warn('[METRICS] error:', e?.message || e);
     return undefined;

@@ -14,6 +14,7 @@ export function createApp() {
   const allowedOrigins = [
     'https://mm-app-77559.ondigitalocean.app', // Front en DO App Platform
     'https://emefjs.duckdns.org',              // Si abres UI desde acá también
+      'http://localhost:4200'                  // Front local dev
   ];
 
   const corsOptions: cors.CorsOptions = {
