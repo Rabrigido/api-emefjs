@@ -18,8 +18,7 @@ export function createApp() {
 
   const corsOptions: cors.CorsOptions = {
     origin: (origin, cb) => {
-      // Permite herramientas sin 'origin' (curl/ThunderClient)
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // Permite curl/ThunderClient
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
@@ -29,7 +28,7 @@ export function createApp() {
   };
 
   // Preflight global antes de todo
-  app.options('*', cors(corsOptions));
+  app.options(/.*/, cors(corsOptions));
   app.use(cors(corsOptions));
   // ====== /CORS ======
 
@@ -72,4 +71,5 @@ export function createApp() {
   return app;
 }
 
+// Default export
 export default createApp;
