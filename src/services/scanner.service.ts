@@ -6,7 +6,7 @@ import path, { dirname, resolve as pathResolve } from "node:path";
 import { glob } from "glob";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import {cleanMetricsPaths} from "../utils/path-cleaner";
+
 import fs from "node:fs";
 
 // ───────────────── helpers ─────────────────
@@ -138,4 +138,17 @@ export async function scanRepo(
     stats,
     modularityMetrics, // ← adjuntamos crudo lo que entrega la lib (si hay)
   };
+}
+
+
+export function cleanMetricsPaths(metrics: any, repoRoot: string) {
+  if (!metrics || typeof metrics !== "object") return metrics;
+
+  const cleaned: Record<string, any> = {};
+  for (const [absPath, data] of Object.entries(metrics)) {
+    // Saca la parte absoluta hasta la raíz del repo
+    const relPath = path.relative(repoRoot, absPath);
+    cleaned[relPath] = data;
+  }
+  return cleaned;
 }
