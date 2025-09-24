@@ -6,6 +6,7 @@ import path, { dirname, resolve as pathResolve } from "node:path";
 import { glob } from "glob";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import {cleanMetricsPaths} from "../utils/path-cleaner";
 import fs from "node:fs";
 
 // ───────────────── helpers ─────────────────
@@ -86,7 +87,9 @@ function runMetricsIsolated(codePath: string, timeoutMs = 600000) {
         }
         try {
           const parsed = JSON.parse(stdout || "{}");
-          return resolveP(parsed);
+          // limpia paths absolutos y relativos fuera del repo
+          const cleaned = cleanMetricsPaths(parsed, codePath);
+          return resolveP(cleaned);
         } catch (e) {
           console.warn("[METRICS] invalid JSON from runner");
           return rejectP(e);
