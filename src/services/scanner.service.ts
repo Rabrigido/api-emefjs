@@ -70,27 +70,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /** Ejecuta metrics en un proceso limpio → sin caché ni estado previo */
-function runMetricsIsolated(codePath: string, timeoutMs = 600_000): Promise<any> {
-  // metrics-runner.js está en la raíz del proyecto (dos niveles arriba de services/)
+
+function runMetricsIsolated(codePath: string, timeoutMs = 600000) {
   const runner = pathResolve(__dirname, "../../metrics-runner.js");
   return new Promise((resolveP, rejectP) => {
-    execFile("node", [runner, codePath], { timeout: timeoutMs }, (err, stdout, stderr) => {
-      if (err) {
-        // Log útil para diagnóstico
-        console.warn("[METRICS] runner failed:", err.message);
-        if (stderr) console.warn("[METRICS] runner stderr:", stderr);
-        return rejectP(err);
+    execFile(
+      "node",
+      [runner, codePath],
+      { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (err) {
+          console.warn("[METRICS] runner failed:", err.message);
+          if (stderr) console.warn("[METRICS] runner stderr:", stderr.slice(0, 2000));
+          return rejectP(err);
+        }
+        try {
+          const parsed = JSON.parse(stdout || "{}");
+          return resolveP(parsed);
+        } catch (e) {
+          console.warn("[METRICS] invalid JSON from runner");
+          return rejectP(e);
+        }
       }
-      try {
-        const parsed = JSON.parse(stdout || "{}");
-        return resolveP(parsed);
-      } catch (e) {
-        console.warn("[METRICS] invalid JSON from runner");
-        return rejectP(e);
-      }
-    });
+    );
   });
 }
+
 
 // ───────────────── entrypoint ─────────────────
 export async function scanRepo(
