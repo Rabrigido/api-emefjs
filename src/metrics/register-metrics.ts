@@ -1,5 +1,5 @@
 // src/metrics/register-metrics.ts
-import { calculateMetrics } from 'modularity-metrics';
+import { calculateMetrics } from 'metrics-js-ts';
 
 export async function runMetrics(codePath: string, customMetricsPath?: string) {
   return await calculateMetrics({

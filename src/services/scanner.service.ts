@@ -1,5 +1,5 @@
 // src/services/scanner.service.ts
-import type { ScanResult } from "../types/ScanResult";
+import type { ScanResult } from "../types/ScanResult.js";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path, { dirname, resolve as pathResolve } from "node:path";
