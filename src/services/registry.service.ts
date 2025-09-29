@@ -1,7 +1,8 @@
 import { mkdir, stat, writeFile, rm, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { ENV } from '../config/env.js';
-import { RepoRecord } from '../types/RepoRecord';
+import type { RepoRecord } from '../types/RepoRecord.js';
+
 
 
 
