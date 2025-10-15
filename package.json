@@ -32,7 +32,7 @@
     "echarts": "^6.0.0",
     "express": "^5.1.0",
     "jest": "^30.0.4",
-    "metrics-js-ts": "^0.9.1",
+    "metrics-js-ts": "^1.0.0",
     "morgan": "^1.10.1",
     "rotating-file-stream": "^3.2.7",
     "simple-git": "^3.28.0",

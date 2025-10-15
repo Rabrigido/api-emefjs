@@ -2,6 +2,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { httpLoggerToFile, httpLoggerToConsole } from './logger/http-logger.js';
 import { reposRouter } from './routes/repos.router.js';
+import metricsRoutes from "./routes/metrics.router.js";
+
 import cors from 'cors';
 
 export function createApp() {
@@ -51,6 +53,7 @@ export function createApp() {
 
   // Rutas
   app.use('/repos', reposRouter);
+  app.use("/metrics", metricsRoutes);
 
   // Health simple
   app.get('/health', (_req: Request, res: Response) => res.json({ ok: true }));

@@ -7,7 +7,6 @@ import { glob } from "glob";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import fs from "node:fs";
 
 // ───────────────── helpers ─────────────────
 /** Si existe /src usa ese path; si no, cae al raíz del repo.
@@ -19,6 +18,28 @@ async function resolveBestCodePath(repoPath: string) {
     if (existsSync(p)) return p;
   }
   return repoPath; // fallback final
+}
+
+
+// ───────────── Normaliza nombres de métricas: "..\\..\\..\\foo" -> "foo" ─────────────
+function normalizeMetricKey(key: string) {
+  // pasa a POSIX
+  let s = key.replace(/\\/g, "/");
+  // saca ./ y ../ repetidos al inicio
+  s = s.replace(/^(\.\/)+/, "");
+  s = s.replace(/^(\.\.\/)+/, "");
+  // quita / sobrante inicial por si acaso
+  s = s.replace(/^\/+/, "");
+  return s;
+}
+
+function remapMetricKeys(metricsObj: any) {
+  if (!metricsObj || typeof metricsObj !== "object") return metricsObj;
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(metricsObj)) {
+    out[normalizeMetricKey(k)] = v;
+  }
+  return out;
 }
 
 // ───────────────── basic scan ─────────────────
@@ -72,7 +93,8 @@ const __dirname = dirname(__filename);
 
 /** Ejecuta metrics en un proceso limpio → sin caché ni estado previo */
 
-function runMetricsIsolated(codePath: string, timeoutMs = 600000) {
+
+function runMetricsIsolated(codePath: string, repoRoot: string, timeoutMs = 600000) {
   const runner = pathResolve(__dirname, "../../metrics-runner.js");
   return new Promise((resolveP, rejectP) => {
     execFile(
@@ -87,8 +109,8 @@ function runMetricsIsolated(codePath: string, timeoutMs = 600000) {
         }
         try {
           const parsed = JSON.parse(stdout || "{}");
-          // limpia paths absolutos y relativos fuera del repo
-          const cleaned = cleanMetricsPaths(parsed, codePath);
+          // Limpiar contra la RAÍZ del repo (NO contra codePath):
+          const cleaned = cleanMetricsPaths(parsed, repoRoot);
           return resolveP(cleaned);
         } catch (e) {
           console.warn("[METRICS] invalid JSON from runner");
@@ -120,7 +142,8 @@ export async function scanRepo(
     console.log("[METRICS] disabled by env DISABLE_METRICS=1");
   } else {
     try {
-      modularityMetrics = await runMetricsIsolated(codePath);
+      
+modularityMetrics = await runMetricsIsolated(codePath, repoPath);
       const keys = modularityMetrics && typeof modularityMetrics === "object"
         ? Object.keys(modularityMetrics as Record<string, any>)
         : [];
@@ -131,6 +154,8 @@ export async function scanRepo(
     }
   }
 
+  
+
   return {
     repoId,
     scannedAt: new Date().toISOString(),
@@ -138,17 +163,53 @@ export async function scanRepo(
     stats,
     modularityMetrics, // ← adjuntamos crudo lo que entrega la lib (si hay)
   };
+
+  
 }
 
 
 export function cleanMetricsPaths(metrics: any, repoRoot: string) {
   if (!metrics || typeof metrics !== "object") return metrics;
 
-  const cleaned: Record<string, any> = {};
-  for (const [absPath, data] of Object.entries(metrics)) {
-    // Saca la parte absoluta hasta la raíz del repo
-    const relPath = path.relative(repoRoot, absPath);
-    cleaned[relPath] = data;
-  }
-  return cleaned;
+  const toRel = (p: string) => {
+    if (typeof p !== "string") return p;
+    // normaliza y detecta absoluto (soporta Windows C:\)
+    const norm = path.normalize(p);
+    const isAbs = path.isAbsolute(norm) || /^[A-Za-z]:[\\/]/.test(norm);
+    // relativiza solo si es absoluto; si ya es relativo, déjalo
+    let rel = isAbs ? path.relative(repoRoot, norm) : norm;
+    // fuerza POSIX para el JSON
+    rel = rel.split(path.sep).join("/");
+    // elimina prefijos ../ residuales del runner
+    rel = rel.replace(/^(\.\/)+/, "").replace(/^(\.\.\/)+/, "");
+    return rel;
+  };
+
+  // Si el objeto es del tipo { "<ruta>": data, ... } remapeamos claves;
+  // si trae rutas en propiedades internas (file, path, source, etc.), también.
+  const walk = (node: any): any => {
+    if (!node || typeof node !== "object") return node;
+    if (Array.isArray(node)) return node.map(walk);
+
+    const entries = Object.entries(node);
+    const looksLikePathMap = entries.some(([k]) => /[\\/]/.test(k) || /^[A-Za-z]:[\\/]/.test(k));
+
+    if (looksLikePathMap) {
+      const out: Record<string, any> = {};
+      for (const [k, v] of entries) out[toRel(k)] = walk(v);
+      return out;
+    }
+
+    const out: Record<string, any> = {};
+    for (const [k, v] of entries) {
+      if (typeof v === "string" && /(^path$|file|filename|filepath|source)$/i.test(k)) {
+        out[k] = toRel(v);
+      } else {
+        out[k] = walk(v);
+      }
+    }
+    return out;
+  };
+
+  return walk(metrics);
 }

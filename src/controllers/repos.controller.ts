@@ -7,6 +7,7 @@ import { scanRepo } from "../services/scanner.service.js";
 import { shallowClone } from "../services/git.service.js";
 import { searchPopularRepos, getRepoByFullName } from "../services/github.service.js";
 import type { RepoRecord } from "../types/RepoRecord.js";
+import fs from "node:fs";
 
 function parseFullNameFromGitUrl(gitUrl: string): string {
   // soporta: https://github.com/owner/repo(.git) o git@github.com:owner/repo.git
@@ -90,18 +91,63 @@ export const ReposController = {
     return rec;
   },
 
-  scan: async (id: string) => {
-    console.log('[CTRL] scan id=', id);
-    const rec = getRepo(id);
-    if (!rec) {
-      const e = new Error('Repo no encontrado');
-      (e as any).status = 404;
-      throw e;
+
+
+scan: async (id: string) => {
+  console.log('[CTRL] scan id=', id);
+
+  const rec = getRepo(id);
+  if (!rec) {
+    const e = new Error('Repo no encontrado') as any;
+    e.status = 404;
+    throw e;
+  }
+
+  // Escanea (devuelve rutas absolutas)
+  const out = await scanRepo(id, rec.localPath, ENV.SCAN_GLOB);
+  console.log('[CTRL] scan ok');
+
+  // ───────────── Normaliza TODAS las rutas dentro del objeto ─────────────
+  const cleanPathsDeep = (obj: any): any => {
+    if (Array.isArray(obj)) {
+      return obj.map(cleanPathsDeep);
+    } else if (obj && typeof obj === "object") {
+      const res: Record<string, any> = {};
+      for (const [key, val] of Object.entries(obj)) {
+        // si la clave parece una ruta, la limpiamos también
+        const newKey = key.includes(rec.localPath)
+          ? toRepoRel(key)
+          : key;
+        res[newKey] = cleanPathsDeep(val);
+      }
+      return res;
+    } else if (typeof obj === "string" && obj.includes(rec.localPath)) {
+      return toRepoRel(obj);
     }
-    const out = await scanRepo(id, rec.localPath, ENV.SCAN_GLOB);
-    console.log('[CTRL] scan ok');
-    return out;
-  },
+    return obj;
+  };
+
+  // función auxiliar que elimina todo lo previo al repo y normaliza separadores
+  const toRepoRel = (absPath: string) => {
+    const rel = path.relative(rec.localPath, absPath); // quita hasta UUID/
+    return rel.split(path.sep).join('/'); // usa siempre /
+  };
+
+  const cleaned = cleanPathsDeep(out);
+
+  // Guardamos en data/json/:id.json
+  const jsonDir = ENV.JSON_DIR();
+  await fs.promises.mkdir(jsonDir, { recursive: true });
+  const jsonPath = path.join(jsonDir, `${id}.json`);
+  await fs.promises.writeFile(jsonPath, JSON.stringify(cleaned, null, 2));
+
+  console.log(`[CTRL] JSON guardado en ${jsonPath}`);
+
+  return cleaned;
+}
+
+
+,
 
   remove: async (id: string) => {
     const ok = await removeFromRegistry(id);
