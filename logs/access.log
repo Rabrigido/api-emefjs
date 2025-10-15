@@ -40,3 +40,7 @@
 127.0.0.1 GET /metrics/76f80870-eed4-4f52-a622-f410a65e19d7/cyclomatic 200 2 - 18.107 ms
 127.0.0.1 GET /metrics/76f80870-eed4-4f52-a622-f410a65e19d7/cyclomatic 500 61 - 21.469 ms
 127.0.0.1 GET /metrics/76f80870-eed4-4f52-a622-f410a65e19d7/cyclomatic 200 7796 - 23.026 ms
+127.0.0.1 GET /repos 304 - - 4.434 ms
+127.0.0.1 GET /repos/3856d9ae-577f-44e3-a593-c02d8e5bf104 304 - - 2.057 ms
+127.0.0.1 POST /repos/3856d9ae-577f-44e3-a593-c02d8e5bf104/scan 200 102535 - 680.458 ms
+127.0.0.1 GET /metrics/3856d9ae-577f-44e3-a593-c02d8e5bf104/files 200 1663 - 7.604 ms
