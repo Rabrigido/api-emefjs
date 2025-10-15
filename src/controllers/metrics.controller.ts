@@ -4,6 +4,9 @@ import { readFile } from "fs/promises";
 import path from "path";
 import { existsSync } from "fs";
 import { calculateLocSloc } from "../services/metrics/loc-sloc.service.js";
+import { calculateCyclomaticComplexity } from "../services/metrics/cyclomatic.service.js";
+import { analyzeDependencies } from "../services/metrics/dependencies.service.js";
+import { analyzeArchitecture } from "../services/metrics/architecture.service.js";
 
 export const getMetricByName = async (req: Request, res: Response) => {
   try {
@@ -26,7 +29,7 @@ export const getMetricByName = async (req: Request, res: Response) => {
         value.name?.toLowerCase().includes(metricName.toLowerCase()) ||
         value.id === metricName ||
         metricName.toLowerCase() ===
-          value.name?.toLowerCase().replace(/\s+/g, "-")
+        value.name?.toLowerCase().replace(/\s+/g, "-")
     );
 
     if (!metricEntry) {
@@ -84,5 +87,39 @@ export const locSloc = async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Error en locSloc:", err);
     return res.status(500).json({ error: "Error interno al calcular LOC/SLOC" });
+  }
+};
+
+export const cyclomatic = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const repoPath = `data/repos/${id}`;
+    const result = await calculateCyclomaticComplexity(repoPath);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Error interno al calcular Complejidad ciclomatica" });
+  }
+};
+
+export const dependencies = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const repoPath = `data/repos/${id}`;
+    const result = await analyzeDependencies(repoPath);
+    res.json(result);
+  } catch (err) {
+
+    res.status(500).json({ error: "Error interno al generar grafo de dependencias" });
+  }
+};
+
+export const architecture = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const repoPath = `data/repos/${id}`;
+    const result = await analyzeArchitecture(repoPath);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: "Error interno al elaborar grafo de arquitectura" });
   }
 };
