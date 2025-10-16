@@ -96,10 +96,12 @@ const __dirname = dirname(__filename);
 
 function runMetricsIsolated(codePath: string, repoRoot: string, timeoutMs = 600000) {
   const runner = pathResolve(__dirname, "../../metrics-runner.js");
+  const absoluteCodePath = path.isAbsolute(codePath) ? codePath : path.resolve(codePath);
+
   return new Promise((resolveP, rejectP) => {
     execFile(
       "node",
-      [runner, codePath],
+      [runner, absoluteCodePath],
       { timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
       (err, stdout, stderr) => {
         if (err) {
@@ -142,8 +144,8 @@ export async function scanRepo(
     console.log("[METRICS] disabled by env DISABLE_METRICS=1");
   } else {
     try {
-      
-modularityMetrics = await runMetricsIsolated(codePath, repoPath);
+
+      modularityMetrics = await runMetricsIsolated(codePath, repoPath);
       const keys = modularityMetrics && typeof modularityMetrics === "object"
         ? Object.keys(modularityMetrics as Record<string, any>)
         : [];
@@ -154,7 +156,7 @@ modularityMetrics = await runMetricsIsolated(codePath, repoPath);
     }
   }
 
-  
+
 
   return {
     repoId,
@@ -164,7 +166,7 @@ modularityMetrics = await runMetricsIsolated(codePath, repoPath);
     modularityMetrics, // ← adjuntamos crudo lo que entrega la lib (si hay)
   };
 
-  
+
 }
 
 
