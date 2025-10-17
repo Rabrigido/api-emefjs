@@ -16,9 +16,14 @@ export async function calculateCyclomaticComplexity(codePath: string) {
   if (!existsSync(codePath)) throw new Error(`Ruta no encontrada: ${codePath}`);
   console.log(`Iniciando calculo de complejidad ciclomatica por archivo y total.`);
 
-  const files = await glob(`${codePath}/**/*.{js,ts,jsx,tsx,py,java}`, { nodir: true });
+  const files = await glob(`${codePath}/**/*.{js,ts,jsx,tsx,py,java}`, {
+    nodir: true,
+    ignore: ["**/node_modules/**", "**/dist/**", "**/build/**"],
+  });
+
   const results: Record<string, { complexity: number }> = {};
   let totalComplexity = 0;
+
 
   // Construir regex para palabras
   const wordRegex = new RegExp(`\\b(${DECISION_KEYWORDS.join("|")})\\b`, "g");
@@ -36,11 +41,14 @@ export async function calculateCyclomaticComplexity(codePath: string) {
     results[file] = { complexity };
     totalComplexity += complexity;
   }
+  const averageComplexity = totalComplexity / Object.keys(results).length;
 
   return {
     name: "Cyclomatic Complexity",
     description: "Mide la complejidad del flujo de control del código.",
     total: totalComplexity,
+    average: averageComplexity,
+
     byFile: results,
     fileCount: Object.keys(results).length,
   };
