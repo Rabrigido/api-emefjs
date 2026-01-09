@@ -1,4 +1,4 @@
-declare module 'metrics-js-ts' {
+declare module 'jtmetrics' {
   export interface CalculateMetricsOptions {
     codePath: string;
     useDefaultMetrics?: boolean;

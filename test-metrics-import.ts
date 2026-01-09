@@ -1,5 +1,5 @@
 // test-metrics-import.ts
-import * as mm from 'metrics-js-ts';
+import * as mm from 'jtmetrics';
 
 async function main() {
   console.log('[TEST] keys exportadas:', Object.keys(mm));
@@ -12,7 +12,7 @@ async function main() {
     });
     console.log('[TEST] métricas OK, keys del resultado:', Object.keys(result));
   } else {
-    console.log('[TEST] No encontré calculateMetrics en metrics-js-ts');
+    console.log('[TEST] No encontré calculateMetrics en jtmetrics');
   }
 }
 

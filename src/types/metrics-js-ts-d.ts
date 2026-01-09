@@ -3,7 +3,7 @@
 // === API actual del paquete ===
 // (coincide con la implementación: codePath obligatorio,
 //  y opcionales customMetricsPath/useDefaultMetrics)
-declare module 'metrics-js-ts' {
+declare module 'jtmetrics' {
   export interface CalculateMetricsOptions {
     codePath: string;
     customMetricsPath?: string;
@@ -21,8 +21,8 @@ declare module 'metrics-js-ts' {
 // (El submódulo 'modularity-metrics/metrics' no existe, por lo que se elimina esta declaración)
 
 // === Alias legacy para compatibilidad ===
-// Si en algún punto del código quedó 'metrics-js-ts', que resuelva al mismo API.
-declare module 'metrics-js-ts' {
+// Si en algún punto del código quedó 'jtmetrics', que resuelva al mismo API.
+declare module 'jtmetrics' {
   export interface CalculateMetricsOptions {
     codePath: string;
     customMetricsPath?: string;

@@ -1,5 +1,5 @@
 // modularity-adapter.js
-import { calculateMetrics } from "metrics-js-ts";
+import { calculateMetrics } from "jtmetrics";
 
 export async function runModularityMetrics(codePath) {
   const result = await calculateMetrics({

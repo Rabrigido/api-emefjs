@@ -1,5 +1,5 @@
 // metrics-runner.js  (ESM porque "type":"module" en package.json)
-import { calculateMetrics } from 'metrics-js-ts'; // intenta primero alias
+import { calculateMetrics } from 'jtmetrics'; // intenta primero alias
 // Si en tu entorno real el paquete se llama "modularity-metrics", cambia arriba por:
 // import { calculateMetrics } from 'modularity-metrics';
 
